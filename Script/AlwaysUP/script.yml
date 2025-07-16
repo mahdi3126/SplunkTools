@@ -1,0 +1,40 @@
+---
+- name: Deploy Splunk Watchdog script and cron job
+  hosts: all
+  become: yes
+
+  vars:
+    watchdog_path: /usr/local/bin/splunk_watchdog.sh
+    log_file: /var/log/splunk_watchdog.log
+    splunk_bin: /opt/splunk/bin/splunk
+
+  tasks:
+
+    - name: Create Splunk watchdog script
+      copy:
+        dest: "{{ watchdog_path }}"
+        mode: '0755'
+        owner: root
+        group: root
+        content: |
+          #!/bin/bash
+
+          LOG_FILE="{{ log_file }}"
+          SPLUNK_BIN="{{ splunk_bin }}"
+
+          TIMESTAMP=$(date "+%Y-%m-%d %H:%M:%S")
+
+          if ! pgrep -f splunkd > /dev/null; then
+              echo "$TIMESTAMP [WARNING] Splunk is NOT running. Attempting to start it..." >> "$LOG_FILE"
+              $SPLUNK_BIN start >> "$LOG_FILE" 2>&1
+              echo "$TIMESTAMP [INFO] Splunk start command issued." >> "$LOG_FILE"
+          else
+              echo "$TIMESTAMP [OK] Splunk is running." >> "$LOG_FILE"
+          fi
+
+    - name: Ensure cron job for splunk watchdog exists
+      cron:
+        name: "Splunk watchdog every 5 minutes"
+        minute: "*/5"
+        job: "{{ watchdog_path }}"
+        user: root
